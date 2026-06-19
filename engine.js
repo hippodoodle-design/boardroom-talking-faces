@@ -239,9 +239,21 @@ export class AbstractRenderer {
     this.ctx = canvas.getContext("2d");
     this.t = 0; this.level = 0; this.glow = 0;
     this.levelFn = () => 0;
+    this.img = null;
     this.c.width = 360; this.c.height = 360;
   }
-  async load() { this.draw(); }
+  async load() {
+    // Optional STATIC face behind the glow (e.g. Grok's helmet tile). It never
+    // moves a mouth — abstract seats show a speaking-glow + sound-bars only.
+    if (this.cfg.image) {
+      try {
+        this.img = await loadImage(this.cfg.image);
+        this.c.width = this.img.naturalWidth;
+        this.c.height = this.img.naturalHeight;
+      } catch (_) { this.img = null; }
+    }
+    this.draw();
+  }
   setLevelFn(fn) { this.levelFn = fn; }
   tick(dt) {
     this.t += dt;
@@ -252,12 +264,17 @@ export class AbstractRenderer {
     this.draw();
   }
   draw() {
-    const { ctx, cfg } = this, W = this.c.width, H = this.c.height;
+    const { ctx, cfg, img } = this, W = this.c.width, H = this.c.height;
     ctx.clearRect(0, 0, W, H);
     const col = cfg.color || "#6b6b6b";
-    // plate
-    roundRect(ctx, 16, 16, W - 32, H - 32, 28);
-    ctx.fillStyle = cfg.plate || "#f3efe4"; ctx.fill();
+    if (img) {
+      // STATIC real face (Grok's helmet). No mouth — glow + bars signal speaking.
+      ctx.drawImage(img, 0, 0, W, H);
+    } else {
+      // plate
+      roundRect(ctx, 16, 16, W - 32, H - 32, 28);
+      ctx.fillStyle = cfg.plate || "#f3efe4"; ctx.fill();
+    }
     // speaking glow ring
     if (this.glow > 0.01) {
       ctx.save();
@@ -267,18 +284,20 @@ export class AbstractRenderer {
       roundRect(ctx, 16, 16, W - 32, H - 32, 28); ctx.stroke();
       ctx.restore();
     }
-    // brand mark: monogram in a coloured disc
-    const cx = W / 2, cy = H / 2 - 18, R = 64;
-    ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2);
-    ctx.fillStyle = col; ctx.fill();
-    ctx.fillStyle = "#fff";
-    ctx.font = "700 64px -apple-system,Segoe UI,Roboto,sans-serif";
-    ctx.textAlign = "center"; ctx.textBaseline = "middle";
-    ctx.fillText(cfg.mark || (cfg.name || "?")[0], cx, cy + 2);
+    if (!img) {
+      // brand mark: monogram in a coloured disc (only when there's no real face)
+      const cx = W / 2, cy = H / 2 - 18, R = 64;
+      ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2);
+      ctx.fillStyle = col; ctx.fill();
+      ctx.fillStyle = "#fff";
+      ctx.font = "700 64px -apple-system,Segoe UI,Roboto,sans-serif";
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText(cfg.mark || (cfg.name || "?")[0], cx, cy + 2);
+    }
     // sound-bars / equaliser at the bottom — react to live amplitude
     const bars = 7, bw = 12, gap = 9;
     const totW = bars * bw + (bars - 1) * gap;
-    let bx = cx - totW / 2;
+    let bx = W / 2 - totW / 2;
     const baseY = H - 58;
     for (let i = 0; i < bars; i++) {
       const phase = this.t * 9 + i * 0.9;
