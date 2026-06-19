@@ -215,6 +215,14 @@ function roundRect(ctx, x, y, w, h, r) {
   ctx.arcTo(x, y, x + w, y, r);
   ctx.closePath();
 }
+// hex (#rrggbb) -> rgba() string at alpha a. Lets the mouth/lid fade softly to
+// transparent at their edges instead of reading as a hard pasted-on patch.
+function hexA(hex, a) {
+  let h = (hex || "#000").replace("#", "");
+  if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+  const n = parseInt(h, 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+}
 
 export class FaceRenderer {
   constructor(canvas, cfg) {
@@ -225,6 +233,8 @@ export class FaceRenderer {
     this.t = 0; this.nextBlink = 1 + Math.random() * 3;
     this.levelFn = () => 0;
     this.speaking = false;
+    this.off = document.createElement("canvas");   // buffer for the feathered jaw-drop
+    this.octx = this.off.getContext("2d");
   }
   async load() {
     if (this.cfg.imageCanvas) {
@@ -270,23 +280,87 @@ export class FaceRenderer {
     const shift = this.open * (cfg.maxShift || 0) * H;
     if (shift > 0.4) {
       const jawH = jawBottom - anchorY;
-      ctx.drawImage(img, 0, anchorY, W, jawH, 0, anchorY + shift, W, jawH);
+      // Drop the jaw on a CENTRED, side-feathered band (not the full width) so a
+      // lively jaw-drop never leaves a seam across the cheeks — the band melts back
+      // into the still face at its edges. Full width if jawW omitted (puppet faces).
+      const bandW = Math.min(W, (cfg.jawW || 1) * W);
+      const bx = Math.max(0, Math.min(W - bandW, (cfg.mouthCx ?? 0.5) * W - bandW / 2));
+      const off = this.off, octx = this.octx;
+      off.width = bandW; off.height = jawH + shift + 2;
+      octx.clearRect(0, 0, off.width, off.height);
+      octx.drawImage(img, bx, anchorY, bandW, jawH, 0, shift, bandW, jawH);
+      if (cfg.jawW) {
+        const fade = Math.min(bandW * 0.24, 46);
+        octx.globalCompositeOperation = "destination-in";
+        const mg = octx.createLinearGradient(0, 0, bandW, 0);
+        mg.addColorStop(0, "rgba(0,0,0,0)");
+        mg.addColorStop(fade / bandW, "rgba(0,0,0,1)");
+        mg.addColorStop(1 - fade / bandW, "rgba(0,0,0,1)");
+        mg.addColorStop(1, "rgba(0,0,0,0)");
+        octx.fillStyle = mg; octx.fillRect(0, 0, bandW, off.height);
+        octx.globalCompositeOperation = "source-over";
+      }
+      ctx.drawImage(off, bx, anchorY);
     }
-    // mouth cavity — pinned at the top-lip anchor, opens DOWNWARD only
+    // mouth cavity — pinned at the top-lip anchor, opens DOWNWARD only.
+    // SOFT technique (painted faces): instead of a flat dark rounded-rect that
+    // reads as a pasted-on smudge, the cavity is feathered with a radial gradient
+    // that fades to fully transparent at its rim and starts soft at the top lip,
+    // tinted to cfg.cavityColor. A thin lip-coloured lower-lip highlight sits just
+    // under the opening so it reads as the lips PARTING, not a hole punched in.
     const ch = this.open * (cfg.maxOpen || 0.08) * H;
     if (ch > 0.6) {
       const cw = cfg.mouthW * W, cx = cfg.mouthCx * W;
-      roundRect(ctx, cx - cw / 2, anchorY, cw, ch, Math.min(cw, ch) / 2.3);
-      ctx.fillStyle = cfg.cavityColor || "#2a2620";
-      ctx.fill();
+      const top = anchorY, cyc = top + ch / 2;       // ellipse centred in the gap
+      const cav = cfg.cavityColor || "#3a2620";
+      const peak = cfg.cavityAlpha || 0.86;
+      ctx.save();
+      // a mouth-SHAPED ellipse (wider than tall), top pinned at the lip anchor
+      ctx.beginPath();
+      ctx.ellipse(cx, cyc, cw / 2, ch / 2, 0, 0, 7);
+      ctx.clip();
+      // darkest at the centre, fading to fully transparent at the lip rim, so it
+      // reads as the dark INSIDE the mouth — not a flat patch with a hard edge
+      const g = ctx.createRadialGradient(cx, cyc, Math.min(cw, ch) * 0.06,
+                                         cx, cyc, Math.max(cw, ch) * 0.62);
+      g.addColorStop(0.0, hexA(cav, peak));
+      g.addColorStop(0.6, hexA(cav, peak * 0.6));
+      g.addColorStop(1.0, hexA(cav, 0.0));
+      ctx.fillStyle = g;
+      ctx.fillRect(cx - cw / 2, top, cw, ch);
+      ctx.restore();
+      // soft lower-lip highlight just beneath the opening (lip-coloured)
+      if (cfg.lipColor) {
+        ctx.save();
+        ctx.globalAlpha = Math.min(0.55, this.open * 0.9);
+        ctx.strokeStyle = cfg.lipColor;
+        ctx.lineWidth = Math.max(2, ch * 0.16);
+        ctx.lineCap = "round";
+        ctx.beginPath();
+        ctx.moveTo(cx - cw * 0.42, top + ch);
+        ctx.quadraticCurveTo(cx, top + ch + ch * 0.10, cx + cw * 0.42, top + ch);
+        ctx.stroke();
+        ctx.restore();
+      }
     }
-    // blink — sage eyelid drops from the top of the eye box
-    if (this.blink > 0.02 && cfg.eye) {
+    // blink — softened translucent eyelid drops from the top of the eye box, with a
+    // feathered leading edge so it reads as a lid sweeping, not a paint patch.
+    // SKIPPED for glasses-wearers (cfg.glasses) where a lid fights the lens/frame —
+    // their eyes simply stay open and natural (the mouth still moves).
+    if (this.blink > 0.02 && cfg.eye && !cfg.glasses) {
       const ex = cfg.eye.x * W, ey = cfg.eye.y * H, ew = cfg.eye.w * W, eh = cfg.eye.h * H;
       const lidH = this.blink * eh;
-      ctx.fillStyle = cfg.lidColor || "#7b8a65";
+      ctx.save();
       roundRect(ctx, ex, ey, ew, lidH, Math.min(8, lidH));
-      ctx.fill();
+      ctx.clip();
+      const lc = cfg.lidColor || "#7b8a65";
+      const lg = ctx.createLinearGradient(0, ey, 0, ey + lidH);
+      lg.addColorStop(0, hexA(lc, 0.82));
+      lg.addColorStop(0.7, hexA(lc, 0.82));
+      lg.addColorStop(1, hexA(lc, 0.0));   // soft feathered leading edge
+      ctx.fillStyle = lg;
+      ctx.fillRect(ex, ey, ew, lidH);
+      ctx.restore();
     }
     ctx.restore();
 
@@ -403,7 +477,7 @@ export function startLoop() {
 export const BOBBY = {
   id: "bobby", name: "Bobby", kind: "face",
   image: "avatars/bobby.png",
-  voice: "am_michael",                 // warm, steady American male
+  voice: "bm_lewis",                   // warm, steady British male (English-only board)
   eye: { x: 0.205, y: 0.455, w: 0.600, h: 0.250 },
   anchor: 0.755, mouthCx: 0.500, mouthW: 0.190,
   jawBottom: 0.915, maxOpen: 0.090, maxShift: 0.013,
