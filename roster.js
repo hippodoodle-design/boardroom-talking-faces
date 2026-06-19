@@ -2,11 +2,14 @@
 // stand-in character faces (drawn here so the talking mechanism is exact).
 // FACE seats get a moving mouth. ABSTRACT seats keep glow + sound-bars only.
 //
-// NOTE: Roberta / the hippo Chair / the owl / the OpenRouter paper bag / the
-// ChatGPT-Gemini-DeepSeek brand seats are STAND-IN faces — the real HippoChattie
-// character tiles weren't reachable from this build. Drop the real tiles in and
-// swap `imageCanvas` for `image:'avatars/<x>.png'` + tune geometry. GROK is the
-// one seat with no mouth, so it stays abstract (speaking-glow + sound-bars).
+// NOTE: Roberta now uses her REAL canonical tile (avatars/roberta.png —
+// Roberta_Front_Canonical_v2). Her moving mouth sits on the SMILE on her FACE;
+// the blue belly SCREEN is a screen, not a mouth, and stays static.
+// The hippo Chair / the owl / the OpenRouter paper bag / the
+// ChatGPT-Gemini-DeepSeek brand seats are still STAND-IN faces — the real
+// HippoChattie tiles weren't reachable from this build. Drop the real tiles in
+// and swap `imageCanvas` for `image:'avatars/<x>.png'` + tune geometry. GROK is
+// the one seat with no mouth, so it stays abstract (speaking-glow + sound-bars).
 import { BOBBY } from "./engine.js";
 
 function mk() { const c = document.createElement("canvas"); c.width = 360; c.height = 360; return c; }
@@ -46,26 +49,8 @@ function drawOwl() {
   x.beginPath(); x.moveTo(180, 192); x.lineTo(206, 214); x.lineTo(180, 240); x.lineTo(154, 214); x.closePath(); x.fill();
   return c;
 }
-// ---- Daisy-robot Roberta (golden + white petals) ------------------------------
-function drawDaisy() {
-  const c = mk(), x = c.getContext("2d");
-  const cx = 180, cy = 176;
-  x.fillStyle = "#ffffff"; x.strokeStyle = "#ece4cb"; x.lineWidth = 2;
-  for (let i = 0; i < 12; i++) {
-    const a = (i / 12) * Math.PI * 2;
-    const px = cx + Math.cos(a) * 96, py = cy + Math.sin(a) * 96;
-    x.save(); x.translate(px, py); x.rotate(a);
-    x.beginPath(); x.ellipse(0, 0, 40, 22, 0, 0, 7); x.fill(); x.stroke(); x.restore();
-  }
-  x.fillStyle = "#FBE3A0"; x.strokeStyle = "#e9c869"; x.lineWidth = 4; // face disc
-  x.beginPath(); x.ellipse(cx, cy, 92, 92, 0, 0, 7); x.fill(); x.stroke();
-  x.fillStyle = "rgba(231,120,120,.5)"; // cheeks
-  for (const chx of [128, 232]) { x.beginPath(); x.ellipse(chx, 196, 16, 11, 0, 0, 7); x.fill(); }
-  eye(x, 150, 166, 14, 17, 10, 1); eye(x, 210, 166, 14, 17, 10, 1);
-  x.strokeStyle = "#a85a4a"; x.lineWidth = 6; x.lineCap = "round"; // smile
-  x.beginPath(); x.moveTo(156, 210); x.quadraticCurveTo(180, 226, 204, 210); x.stroke();
-  return c;
-}
+// (Roberta's hand-drawn daisy-robot stand-in has been retired — she now loads
+//  her real canonical tile avatars/roberta.png. See the ROSTER entry below.)
 
 // ---- OpenRouter — paper-bag character (teal "map" is just print on the bag) ---
 // OpenRouter is NOT an abstract map: it's a paper-bag CHARACTER with a real
@@ -134,10 +119,13 @@ export const ROSTER = [
   { ...BOBBY, role: "your Bobby · personal aide",
     line: "And I'm your Bobby — here for you, and I'll speak up when it helps." },
 
-  { ...FACE_COMMON, id: "roberta", name: "Roberta", role: "house host · daisy-robot · stand-in art",
-    standin: true, imageCanvas: drawDaisy(), voice: "af_heart",
-    eye: { x: 0.355, y: 0.40, w: 0.29, h: 0.16 }, anchor: 0.585, mouthCx: 0.5, mouthW: 0.17,
-    jawBottom: 0.72, maxOpen: 0.075, cavityColor: "#8f3a31", lidColor: "#FBE3A0",
+  // Roberta — REAL canonical tile (Roberta_Front_Canonical_v2). Mouth box sits on
+  // the SMILE on her FACE; the blue belly SCREEN is a screen, not a mouth, so it
+  // stays static (anchor/jawBottom are kept well above the screen's top edge).
+  { ...FACE_COMMON, id: "roberta", name: "Roberta", role: "house host · daisy-robot",
+    image: "avatars/roberta.png", voice: "af_heart",
+    eye: { x: 0.355, y: 0.247, w: 0.235, h: 0.052 }, anchor: 0.311, mouthCx: 0.503, mouthW: 0.063,
+    jawBottom: 0.352, maxOpen: 0.028, maxShift: 0.004, cavityColor: "#7e3b33", lidColor: "#f2f1f6",
     line: "Welcome — I'm Roberta, your host. The table's set; let's begin." },
 
   { ...FACE_COMMON, id: "chair", name: "Chairman", role: "the Chair · hippo · stand-in art",
