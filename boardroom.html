@@ -29,11 +29,16 @@
          text-align:center; cursor:pointer; transition:box-shadow .15s, transform .15s; }
   .seat:active{ transform:scale(.98); }
   .seat.on{ box-shadow:0 0 0 3px rgba(123,138,102,.45); }
+  /* the live-mic 'You' seat: green ring + a soft breathing glow while live */
+  .seat.you{ border-color:#c5e3cf; }
+  .seat.live{ animation:liveglow 1.1s ease-in-out infinite; }
+  @keyframes liveglow{ 0%,100%{ box-shadow:0 0 0 0 rgba(47,143,91,0);} 50%{ box-shadow:0 0 0 5px rgba(47,143,91,.5);} }
   .seat canvas{ width:100%; height:auto; display:block; border-radius:12px; background:#efeadf; }
   .nm{ font-weight:650; font-size:14px; margin-top:7px; }
   .rl{ color:var(--muted); font-size:11.5px; }
   .tag{ display:inline-block; font-size:10px; color:#9a7a3a; background:#fbf3df;
         border:1px solid #efe2c2; border-radius:999px; padding:1px 7px; margin-top:3px; }
+  .tag.you{ color:#2f6b46; background:#e9f4ec; border-color:#c5e3cf; }
   details.metrics{ margin-top:18px; background:var(--card); border:1px solid var(--line); border-radius:14px; padding:10px 14px; }
   details.metrics summary{ font-size:13px; color:var(--muted); cursor:pointer; }
   .kv{ display:flex; justify-content:space-between; font-size:13px; padding:5px 0; border-top:1px dashed var(--line); }
@@ -45,7 +50,7 @@
 <body>
 <div class="wrap">
   <h1>The boardroom — talking faces on free voices</h1>
-  <p class="sub">Each seat moves its mouth to its OWN free Kokoro voice. Grok is the one seat with no mouth, so it alone keeps a speaking glow + sound-bars — no fake mouth bolted on. <a href="./">← back to Bobby</a></p>
+  <p class="sub">Each seat moves its mouth to its OWN free Kokoro voice. <b>Amanda's seat is YOU</b> — tap it to grant your mic, then your avatar's mouth moves with your real voice (no camera). Grok is the one seat with no mouth, so it alone keeps a speaking glow + sound-bars. <a href="./">← back to Bobby</a></p>
 
   <div class="controls">
     <button class="cta" id="run">▶ Take your seat &amp; run the table</button>
@@ -65,33 +70,36 @@
     <div class="kv"><span>Speed (gen ÷ audio)</span><b id="m-rtf">—</b></div>
   </details>
 
-  <p class="note">Free &amp; open: Kokoro-82M (Apache-2.0) — distinct voice per seat, no ElevenLabs, no per-word cost. The Chair (Claude ai hippo), Perplexity owl, OpenRouter's paper bag, Gemini, OpenAI/ChatGPT and CC/Coder now use their real HippoChattie tiles — each mouth moves on that character's own mouth/beak. Roberta and Bobby use their real tiles too. DeepSeek is the last stand-in face, pending its real tile. Grok stays a glow seat — it has no mouth — now showing its real helmet tile behind the glow.</p>
+  <p class="note">Free &amp; open: Kokoro-82M (Apache-2.0) — distinct voice per seat, no ElevenLabs, no per-word cost. The Chair (Claude ai hippo), Perplexity owl, OpenRouter's paper bag, Gemini, OpenAI/ChatGPT and CC/Coder now use their real HippoChattie tiles — each mouth moves on that character's own mouth/beak. Roberta and Bobby use their real tiles too. Amanda's seat is the first <b>speak-as-avatar</b> seat — same jaw-drop, but driven live by your microphone instead of TTS. DeepSeek is the last stand-in face, the one remaining seat pending its real tile. Grok stays a glow seat — it has no mouth — now showing its real helmet tile behind the glow.</p>
 </div>
 
 <script type="module">
-import { KokoroEngine, SpeechPlayer, FaceRenderer, AbstractRenderer, registerRenderer, startLoop }
+import { KokoroEngine, SpeechPlayer, MicEngine, FaceRenderer, AbstractRenderer, registerRenderer, startLoop, DEBUG }
   from "./engine.js";
 import { ROSTER } from "./roster.js";
 
 const $ = (id) => document.getElementById(id);
 const engine = new KokoroEngine();
 const player = new SpeechPlayer();
+const mic = new MicEngine();        // drives the live 'You' (speak-as-avatar) seat
 const grid = $("grid");
 const seats = [];
 
 for (const cfg of ROSTER) {
   const el = document.createElement("div");
-  el.className = "seat";
+  el.className = "seat" + (cfg.live ? " you" : "");
   const canvas = document.createElement("canvas"); canvas.width = canvas.height = 360;
   el.appendChild(canvas);
   const nm = document.createElement("div"); nm.className = "nm"; nm.textContent = cfg.name; el.appendChild(nm);
   const rl = document.createElement("div"); rl.className = "rl"; rl.textContent = cfg.role; el.appendChild(rl);
-  if (cfg.standin) { const t = document.createElement("div"); t.className = "tag"; t.textContent = "stand-in art"; el.appendChild(t); }
+  if (cfg.live) { const t = document.createElement("div"); t.className = "tag you"; t.textContent = "this is you · live mic"; el.appendChild(t); }
+  else if (cfg.standin) { const t = document.createElement("div"); t.className = "tag"; t.textContent = "stand-in art"; el.appendChild(t); }
   grid.appendChild(el);
   const renderer = cfg.kind === "abstract" ? new AbstractRenderer(canvas, cfg) : new FaceRenderer(canvas, cfg);
   const seat = { cfg, el, renderer };
   seats.push(seat);
-  el.onclick = () => speak(seat);
+  // The live seat is mic-driven (toggle on/off); every other seat speaks via TTS.
+  el.onclick = () => (cfg.live ? toggleMic(seat) : speak(seat));
 }
 
 let busy = false, loaded = false;
@@ -137,11 +145,45 @@ async function speak(seat) {
   }
 }
 
+// ---- The live 'You' seat: mouth driven by the LIVE MIC, not TTS ---------------
+// Tap to grant the mic (a user gesture, required by getUserMedia); when granted we
+// feed the seat's mouth from mic RMS and light the green live-glow. Tap again to
+// stop. Fails GRACEFULLY: if the mic is unavailable or blocked, the face still
+// shows — it just doesn't move — and we say why. No Kokoro engine needed for this.
+let micSeat = null;
+async function toggleMic(seat) {
+  if (mic.active && micSeat === seat) {                 // already live -> turn off
+    mic.disable();
+    seat.renderer.setLevelFn(() => 0);
+    seat.el.classList.remove("live");
+    micSeat = null;
+    $("status").textContent = "Mic off. Tap " + seat.cfg.name + "'s seat to go live again.";
+    return;
+  }
+  $("status").textContent = "Asking for your microphone…";
+  const ok = await mic.enable();
+  if (!ok) {                                            // graceful fallback
+    seat.el.classList.remove("live");
+    micSeat = null;
+    $("status").textContent = (mic.error === "unsupported"
+      ? "This browser can't open a mic here (needs https + mic support). "
+      : "Mic permission was blocked — allow it in your browser, then tap again. ")
+      + seat.cfg.name + "'s face still shows, just without a live mouth.";
+    return;
+  }
+  micSeat = seat;
+  seat.el.classList.add("live");
+  seat.renderer.setLevelFn(() => mic.sample());         // mic RMS -> top-lip jaw-drop
+  $("status").textContent = "You're live — talk, and " + seat.cfg.name +
+    "'s mouth moves with your voice. Tap the seat again to stop.";
+}
+
 $("run").onclick = async () => {
   $("run").disabled = true;
   if (!(await ensureLoaded())) { $("run").disabled = false; return; }
-  for (const seat of seats) { await speak(seat); }
-  $("status").textContent = "That's the table. Tap any seat to hear it again.";
+  // The live 'You' seat is mic-driven, not TTS — skip it when running the table.
+  for (const seat of seats) { if (seat.cfg.live) continue; await speak(seat); }
+  $("status").textContent = "That's the table. Tap any seat to hear it again — or tap Amanda to go live on your mic.";
   $("run").disabled = false;
 };
 
@@ -149,6 +191,7 @@ $("run").onclick = async () => {
   await Promise.all(seats.map((s) => s.renderer.load()));
   seats.forEach((s) => registerRenderer(s.renderer));
   startLoop();
+  if (DEBUG) { window.__seats = seats; window.__mic = mic; }  // handles for headless verification
 })();
 </script>
 </body>

@@ -7,6 +7,9 @@ import { KokoroTTS } from "https://esm.sh/kokoro-js@1.2.1";
 
 export const DEBUG = new URLSearchParams(location.search).has("debug");
 const QS = new URLSearchParams(location.search);
+// ?overlay draws the geometry guides (anchor/jawBottom/eye-box) for tuning faces;
+// kept separate from ?debug so a debug build can still screenshot a clean face.
+export const OVERLAY = QS.has("overlay");
 
 const MODEL_ID = "onnx-community/Kokoro-82M-v1.0-ONNX";
 
@@ -123,6 +126,75 @@ export class SpeechPlayer {
   }
 }
 
+// ---- MicEngine: LIVE microphone amplitude for the speak-as-avatar feature -----
+// getUserMedia mic stream -> AnalyserNode -> live RMS, shaped to the same 0..1
+// envelope as SpeechPlayer.sample(). This is what lets a human drive a chosen
+// avatar's mouth from their REAL voice — no camera, no TTS. Designed to fail
+// GRACEFULLY: if there's no mic API or the user blocks permission, enable()
+// resolves false and the avatar simply stays static (its face still renders).
+export class MicEngine {
+  constructor() {
+    this.ctx = null; this.analyser = null; this.data = null;
+    this.stream = null; this.source = null;
+    this.level = 0; this.active = false; this.denied = false; this.error = null;
+  }
+  get supported() {
+    return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia &&
+              (window.AudioContext || window.webkitAudioContext));
+  }
+  // Must be called from a user gesture (the seat tap). Resolves true once the mic
+  // is live; false (never throws) if unsupported or permission was blocked.
+  async enable() {
+    if (this.active) return true;
+    if (!this.supported) { this.error = "unsupported"; return false; }
+    try {
+      this.stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        video: false,
+      });
+    } catch (e) {
+      this.denied = true;
+      this.error = (e && e.name) || "denied";
+      return false;                         // graceful: caller shows a fallback note
+    }
+    const AC = window.AudioContext || window.webkitAudioContext;
+    this.ctx = new AC();
+    if (this.ctx.state !== "running") { try { await this.ctx.resume(); } catch (_) {} }
+    this.source = this.ctx.createMediaStreamSource(this.stream);
+    this.analyser = this.ctx.createAnalyser();
+    this.analyser.fftSize = 1024;
+    this.analyser.smoothingTimeConstant = 0.0;
+    this.data = new Float32Array(this.analyser.fftSize);
+    // analyser is intentionally NOT connected to destination — we only READ the
+    // amplitude; routing the mic to the speakers would cause feedback/echo.
+    this.source.connect(this.analyser);
+    this.active = true; this.denied = false; this.error = null;
+    return true;
+  }
+  disable() {
+    this.active = false;
+    try { if (this.source) this.source.disconnect(); } catch (_) {}
+    try { if (this.stream) this.stream.getTracks().forEach((t) => t.stop()); } catch (_) {}
+    try { if (this.ctx) this.ctx.close(); } catch (_) {}
+    this.source = null; this.stream = null; this.analyser = null; this.ctx = null;
+    this.level = 0;
+  }
+  // Live RMS amplitude -> 0..1, fast attack / slower release (same envelope shape
+  // the faces already expect from TTS, so the exact jaw-drop path is reused).
+  sample() {
+    if (!this.active || !this.analyser) { this.level *= 0.75; return this.level; }
+    this.analyser.getFloatTimeDomainData(this.data);
+    let s = 0;
+    for (let i = 0; i < this.data.length; i++) s += this.data[i] * this.data[i];
+    const rms = Math.sqrt(s / this.data.length);
+    let v = (rms - 0.006) / 0.10;           // mic noise floor a touch above TTS's
+    v = Math.max(0, Math.min(1, v));
+    const a = v > this.level ? 0.6 : 0.22;  // snappy open, gentle close
+    this.level += (v - this.level) * a;
+    return this.level;
+  }
+}
+
 // ---- FaceRenderer: the proven top-lip-anchored jaw-drop, in the browser -------
 function loadImage(src) {
   return new Promise((res, rej) => {
@@ -218,7 +290,7 @@ export class FaceRenderer {
     }
     ctx.restore();
 
-    if (DEBUG) {
+    if (OVERLAY) {
       ctx.save();
       ctx.strokeStyle = "#0078ff"; ctx.lineWidth = 1.5;
       if (cfg.eye) ctx.strokeRect(cfg.eye.x * W, cfg.eye.y * H, cfg.eye.w * W, cfg.eye.h * H);

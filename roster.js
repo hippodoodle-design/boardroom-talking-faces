@@ -6,10 +6,14 @@
 // mouth/beak (same method as Bobby/Roberta). The tiles were supplied as card
 // screenshots and cropped to just the character art (caption bar + chrome removed).
 //
-// Still stand-in: DeepSeek (no tile supplied yet — keeps its branded stand-in
-// face that still talks). GROK is the one seat with no mouth, so it stays the
-// single ABSTRACT seat (speaking-glow + sound-bars) — now showing its real helmet
-// tile as a static face behind the glow.
+// The 'Amanda' seat is special: it's a SPEAK-AS-AVATAR seat (this is YOU) whose
+// mouth is driven by the LIVE MIC, not TTS — see boardroom.html's toggleMic().
+//
+// Still stand-in: DeepSeek — a CONFIRMED PERMANENT seat that is the ONE remaining
+// seat awaiting real art (Amanda will supply a tile); keeps its branded stand-in
+// face that still talks. GROK is the one seat with no mouth, so it stays the single
+// ABSTRACT seat (speaking-glow + sound-bars) — now showing its real helmet tile as
+// a static face behind the glow.
 import { BOBBY } from "./engine.js";
 
 function mk() { const c = document.createElement("canvas"); c.width = 360; c.height = 360; return c; }
@@ -47,6 +51,20 @@ const drawDeepSeek = drawBrandFace("#4D6BFE", "D");
 const FACE_COMMON = { kind: "face", maxShift: 0.012 };
 
 export const ROSTER = [
+  // Amanda — the FIRST 'speak-as-avatar' seat. This is the previously-held '3'
+  // tile, now ASSIGNED as Amanda's own self-avatar (warm grey-haired woman, round
+  // glasses, flower, red-heart necklace, green cardigan). Unlike every other seat
+  // its mouth is driven by the LIVE MICROPHONE (Web Audio RMS on a getUserMedia
+  // stream), NOT by TTS: tap it to grant the mic, then it moves its mouth to your
+  // real voice — present & expressive with NO camera. Same top-lip-anchored
+  // jaw-drop + blink + sway; the speaking-glow is lit while the mic is live.
+  { ...FACE_COMMON, id: "amanda", name: "Amanda", role: "You · Founder & host · live mic",
+    self: true, live: true, image: "avatars/amanda.jpg",
+    eye: { x: 0.358, y: 0.322, w: 0.267, h: 0.080 }, anchor: 0.467, mouthCx: 0.487, mouthW: 0.112,
+    jawBottom: 0.588, maxOpen: 0.05, maxShift: 0.004, mouthGain: 1.5,
+    cavityColor: "#6e2f2c", lidColor: "#e7b89c",
+    line: "And this is me — when I talk, my avatar talks. No camera, just my voice." },
+
   { ...BOBBY, role: "your Bobby · personal aide",
     line: "And I'm your Bobby — here for you, and I'll speak up when it helps." },
 
@@ -98,9 +116,11 @@ export const ROSTER = [
     jawBottom: 0.66, maxOpen: 0.05, maxShift: 0.004, cavityColor: "#2a1a3a", lidColor: "#6a5a88",
     line: "I'll weigh the trade-offs and keep us balanced." },
 
-  // DeepSeek — STILL stand-in (no real tile supplied yet). Keeps a branded face
-  // that talks. Swap imageCanvas for image:'avatars/deepseek.png' when it lands.
-  { ...FACE_COMMON, id: "deepseek", name: "DeepSeek", role: "seat · brand · stand-in art",
+  // DeepSeek — CONFIRMED PERMANENT seat, but the ONE remaining seat still awaiting
+  // its real art (Amanda will supply a tile). Keeps its branded stand-in face that
+  // still talks (only Grok is mouthless). Swap imageCanvas for the real
+  // image:'avatars/deepseek.<ext>' + tune geometry when the tile lands.
+  { ...FACE_COMMON, id: "deepseek", name: "DeepSeek", role: "seat · brand · awaiting real tile",
     standin: true, imageCanvas: drawDeepSeek(), voice: "am_eric",
     eye: { x: 0.36, y: 0.475, w: 0.28, h: 0.15 }, anchor: 0.694, mouthCx: 0.5, mouthW: 0.16,
     jawBottom: 0.90, maxOpen: 0.075, cavityColor: "#172148", lidColor: "#efe9dd",
