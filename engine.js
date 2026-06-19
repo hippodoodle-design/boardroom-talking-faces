@@ -155,9 +155,16 @@ export class FaceRenderer {
     this.speaking = false;
   }
   async load() {
-    this.img = await loadImage(this.cfg.image);
-    this.c.width = this.img.naturalWidth;
-    this.c.height = this.img.naturalHeight;
+    if (this.cfg.imageCanvas) {
+      // a pre-rendered stand-in face (offscreen canvas) — reuses every effect
+      this.img = this.cfg.imageCanvas;
+      this.c.width = this.img.width;
+      this.c.height = this.img.height;
+    } else {
+      this.img = await loadImage(this.cfg.image);
+      this.c.width = this.img.naturalWidth;
+      this.c.height = this.img.naturalHeight;
+    }
     this.draw();
   }
   setLevelFn(fn) { this.levelFn = fn; }
@@ -220,6 +227,67 @@ export class FaceRenderer {
       ctx.strokeStyle = "#00c800";
       ctx.beginPath(); ctx.moveTo(0, jawBottom); ctx.lineTo(W, jawBottom); ctx.stroke();
       ctx.restore();
+    }
+  }
+}
+
+// ---- AbstractRenderer: NO face. Speaking-glow + sound-bars only. -------------
+// For logo / map / faceless seats — we never bolt a fake mouth on these.
+export class AbstractRenderer {
+  constructor(canvas, cfg) {
+    this.c = canvas; this.cfg = cfg;
+    this.ctx = canvas.getContext("2d");
+    this.t = 0; this.level = 0; this.glow = 0;
+    this.levelFn = () => 0;
+    this.c.width = 360; this.c.height = 360;
+  }
+  async load() { this.draw(); }
+  setLevelFn(fn) { this.levelFn = fn; }
+  tick(dt) {
+    this.t += dt;
+    const target = this.levelFn();
+    this.level += (target - this.level) * (target > this.level ? 0.5 : 0.2);
+    const gt = target > 0.02 ? 1 : 0;
+    this.glow += (gt - this.glow) * 0.12;
+    this.draw();
+  }
+  draw() {
+    const { ctx, cfg } = this, W = this.c.width, H = this.c.height;
+    ctx.clearRect(0, 0, W, H);
+    const col = cfg.color || "#6b6b6b";
+    // plate
+    roundRect(ctx, 16, 16, W - 32, H - 32, 28);
+    ctx.fillStyle = cfg.plate || "#f3efe4"; ctx.fill();
+    // speaking glow ring
+    if (this.glow > 0.01) {
+      ctx.save();
+      ctx.globalAlpha = 0.35 * this.glow + 0.25 * this.level;
+      ctx.lineWidth = 6 + 10 * this.level;
+      ctx.strokeStyle = col;
+      roundRect(ctx, 16, 16, W - 32, H - 32, 28); ctx.stroke();
+      ctx.restore();
+    }
+    // brand mark: monogram in a coloured disc
+    const cx = W / 2, cy = H / 2 - 18, R = 64;
+    ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2);
+    ctx.fillStyle = col; ctx.fill();
+    ctx.fillStyle = "#fff";
+    ctx.font = "700 64px -apple-system,Segoe UI,Roboto,sans-serif";
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText(cfg.mark || (cfg.name || "?")[0], cx, cy + 2);
+    // sound-bars / equaliser at the bottom — react to live amplitude
+    const bars = 7, bw = 12, gap = 9;
+    const totW = bars * bw + (bars - 1) * gap;
+    let bx = cx - totW / 2;
+    const baseY = H - 58;
+    for (let i = 0; i < bars; i++) {
+      const phase = this.t * 9 + i * 0.9;
+      const amp = this.level * (0.55 + 0.45 * Math.sin(phase));
+      const h = 6 + Math.max(0, amp) * 46;
+      roundRect(ctx, bx, baseY - h, bw, h, 5);
+      ctx.fillStyle = col; ctx.globalAlpha = 0.55 + 0.45 * this.level;
+      ctx.fill(); ctx.globalAlpha = 1;
+      bx += bw + gap;
     }
   }
 }

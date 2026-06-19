@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#F4EFE6" />
+<link rel="icon" type="image/png" href="favicon-32.png" />
+<link rel="apple-touch-icon" href="icon-192.png" />
+<title>The boardroom — talking faces, free voices</title>
+<style>
+  :root{ --cream:#F4EFE6; --card:#fff; --ink:#232323; --muted:#7a766d;
+         --line:#e7e0d3; --sage:#7b8a66; }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  body{ margin:0; background:var(--cream); color:var(--ink);
+        font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,system-ui,sans-serif; line-height:1.5; }
+  .wrap{ max-width:720px; margin:0 auto; padding:18px 14px 56px; }
+  h1{ font-size:21px; margin:4px 0 2px; }
+  .sub{ color:var(--muted); font-size:13px; margin:0 0 14px; }
+  .controls{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:8px; }
+  .cta{ background:var(--ink); color:#fff; border:none; border-radius:13px; padding:13px 18px;
+        font-size:15px; font-weight:600; cursor:pointer; }
+  .cta:disabled{ opacity:.55; }
+  .status{ font-size:13px; color:var(--muted); min-height:18px; flex:1 1 200px; }
+  .bar{ height:7px; background:#eee6d6; border-radius:6px; overflow:hidden; margin:8px 0 14px; display:none; }
+  .bar > i{ display:block; height:100%; width:0; background:var(--sage); transition:width .2s; }
+  .grid{ display:grid; grid-template-columns:repeat(2,1fr); gap:12px; }
+  @media(min-width:560px){ .grid{ grid-template-columns:repeat(3,1fr); } }
+  .seat{ background:var(--card); border:1px solid var(--line); border-radius:16px; padding:10px;
+         text-align:center; cursor:pointer; transition:box-shadow .15s, transform .15s; }
+  .seat:active{ transform:scale(.98); }
+  .seat.on{ box-shadow:0 0 0 3px rgba(123,138,102,.45); }
+  .seat canvas{ width:100%; height:auto; display:block; border-radius:12px; background:#efeadf; }
+  .nm{ font-weight:650; font-size:14px; margin-top:7px; }
+  .rl{ color:var(--muted); font-size:11.5px; }
+  .tag{ display:inline-block; font-size:10px; color:#9a7a3a; background:#fbf3df;
+        border:1px solid #efe2c2; border-radius:999px; padding:1px 7px; margin-top:3px; }
+  details.metrics{ margin-top:18px; background:var(--card); border:1px solid var(--line); border-radius:14px; padding:10px 14px; }
+  details.metrics summary{ font-size:13px; color:var(--muted); cursor:pointer; }
+  .kv{ display:flex; justify-content:space-between; font-size:13px; padding:5px 0; border-top:1px dashed var(--line); }
+  .kv:first-of-type{ border-top:none; }
+  .note{ font-size:12px; color:var(--muted); margin-top:16px; }
+  a{ color:var(--ink); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>The boardroom — talking faces on free voices</h1>
+  <p class="sub">Each character-faced seat moves its mouth to its OWN free Kokoro voice. Faceless seats (logos, the OpenRouter map) keep a speaking glow + sound-bars — no fake mouth bolted on. <a href="./">← back to Bobby</a></p>
+
+  <div class="controls">
+    <button class="cta" id="run">▶ Take your seat &amp; run the table</button>
+    <span class="status" id="status">One free voice engine, shared by every seat. First tap downloads it once (~80&nbsp;MB).</span>
+  </div>
+  <div class="bar" id="bar"><i id="barfill"></i></div>
+
+  <div class="grid" id="grid"></div>
+
+  <details class="metrics">
+    <summary>Performance (the Samsung test)</summary>
+    <div class="kv"><span>Voice engine</span><b>Kokoro-82M · in-browser</b></div>
+    <div class="kv"><span>Compute</span><b id="m-device">—</b></div>
+    <div class="kv"><span>Voice download</span><b id="m-load">—</b></div>
+    <div class="kv"><span>Last line: spoke</span><b id="m-audio">—</b></div>
+    <div class="kv"><span>Last line: generated in</span><b id="m-gen">—</b></div>
+    <div class="kv"><span>Speed (gen ÷ audio)</span><b id="m-rtf">—</b></div>
+  </details>
+
+  <p class="note">Free &amp; open: Kokoro-82M (Apache-2.0) — distinct voice per seat, no ElevenLabs, no per-word cost. Roberta / the Chair / the owl are stand-in faces pending the real HippoChattie tiles.</p>
+</div>
+
+<script type="module">
+import { KokoroEngine, SpeechPlayer, FaceRenderer, AbstractRenderer, registerRenderer, startLoop }
+  from "./engine.js";
+import { ROSTER } from "./roster.js";
+
+const $ = (id) => document.getElementById(id);
+const engine = new KokoroEngine();
+const player = new SpeechPlayer();
+const grid = $("grid");
+const seats = [];
+
+for (const cfg of ROSTER) {
+  const el = document.createElement("div");
+  el.className = "seat";
+  const canvas = document.createElement("canvas"); canvas.width = canvas.height = 360;
+  el.appendChild(canvas);
+  const nm = document.createElement("div"); nm.className = "nm"; nm.textContent = cfg.name; el.appendChild(nm);
+  const rl = document.createElement("div"); rl.className = "rl"; rl.textContent = cfg.role; el.appendChild(rl);
+  if (cfg.standin) { const t = document.createElement("div"); t.className = "tag"; t.textContent = "stand-in art"; el.appendChild(t); }
+  grid.appendChild(el);
+  const renderer = cfg.kind === "abstract" ? new AbstractRenderer(canvas, cfg) : new FaceRenderer(canvas, cfg);
+  const seat = { cfg, el, renderer };
+  seats.push(seat);
+  el.onclick = () => speak(seat);
+}
+
+let busy = false, loaded = false;
+async function ensureLoaded() {
+  if (loaded) return true;
+  await player.unlock();
+  $("bar").style.display = "block";
+  $("status").textContent = "Fetching the shared voice engine (one-time)…";
+  try {
+    const info = await engine.load(({ pct }) => { $("barfill").style.width = Math.round(pct * 100) + "%"; });
+    $("m-device").textContent = info.device.toUpperCase() + " · " + info.dtype;
+    $("m-load").textContent = (info.loadMs / 1000).toFixed(1) + " s";
+    $("bar").style.display = "none";
+    loaded = true; return true;
+  } catch (e) {
+    $("bar").style.display = "none";
+    $("status").textContent = "Voice failed to load: " + (e && e.message ? e.message : e);
+    return false;
+  }
+}
+
+async function speak(seat) {
+  if (busy) return;
+  if (!(await ensureLoaded())) return;
+  busy = true;
+  seats.forEach((s) => s.el.classList.toggle("on", s === seat));
+  $("status").textContent = seat.cfg.name + " is finding their voice…";
+  try {
+    const r = await engine.generate(seat.cfg.line, seat.cfg.voice);
+    $("m-audio").textContent = r.audioSec.toFixed(1) + " s";
+    $("m-gen").textContent = (r.genMs / 1000).toFixed(2) + " s";
+    $("m-rtf").textContent = r.rtf.toFixed(2) + "×" + (r.rtf <= 1 ? "  ✓" : "");
+    $("status").textContent = seat.cfg.name + " is speaking…";
+    seat.renderer.setLevelFn(() => player.sample());
+    await player.play(r.audio, r.sr);
+  } catch (e) {
+    $("status").textContent = "Couldn't speak — " + (e && e.message ? e.message : e);
+  } finally {
+    seat.renderer.setLevelFn(() => 0);
+    seat.el.classList.remove("on");
+    busy = false;
+    $("status").textContent = "Tap any seat to hear it — or run the table again.";
+  }
+}
+
+$("run").onclick = async () => {
+  $("run").disabled = true;
+  if (!(await ensureLoaded())) { $("run").disabled = false; return; }
+  for (const seat of seats) { await speak(seat); }
+  $("status").textContent = "That's the table. Tap any seat to hear it again.";
+  $("run").disabled = false;
+};
+
+(async () => {
+  await Promise.all(seats.map((s) => s.renderer.load()));
+  seats.forEach((s) => registerRenderer(s.renderer));
+  startLoop();
+})();
+</script>
+</body>
+</html>
