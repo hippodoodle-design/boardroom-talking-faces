@@ -9,44 +9,14 @@
 // The 'Amanda' seat is special: it's a SPEAK-AS-AVATAR seat (this is YOU) whose
 // mouth is driven by the LIVE MIC, not TTS — see boardroom.html's toggleMic().
 //
-// Still stand-in: DeepSeek — a CONFIRMED PERMANENT seat that is the ONE remaining
-// seat awaiting real art (Amanda will supply a tile); keeps its branded stand-in
-// face that still talks. GROK is the one seat with no mouth, so it stays the single
-// ABSTRACT seat (speaking-glow + sound-bars) — now showing its real helmet tile as
-// a static face behind the glow.
+// DeepSeek now has its REAL tile too — 'DeepSeek (Whale), Deep-Sea Scholar' (a
+// friendly blue whale in a lab coat). Its mouth box sits on the SMILE LINE where
+// the upper/lower jaw meet and opens a MODEST dark cavity downward (a whale's jaw
+// opens downward), so it reads as talking, not unhinging. GROK is the one seat with
+// no mouth, so it stays the single ABSTRACT seat (speaking-glow + sound-bars) —
+// showing its real helmet tile as a static face behind the glow. The branded
+// stand-in drawer DeepSeek used (drawBrandFace) is retired now its tile has landed.
 import { BOBBY } from "./engine.js";
-
-function mk() { const c = document.createElement("canvas"); c.width = 360; c.height = 360; return c; }
-function rr(x, a, b, w, h, r) { r = Math.min(r, w / 2, h / 2); x.beginPath(); x.moveTo(a + r, b); x.arcTo(a + w, b, a + w, b + h, r); x.arcTo(a + w, b + h, a, b + h, r); x.arcTo(a, b + h, a, b, r); x.arcTo(a, b, a + w, b, r); x.closePath(); }
-function eye(x, cx, cy, rw, rh, pr, look) {
-  x.fillStyle = "#fff"; x.beginPath(); x.ellipse(cx, cy, rw, rh, 0, 0, 7); x.fill();
-  x.fillStyle = "#2b2b2b"; x.beginPath(); x.ellipse(cx + (look || 0), cy + 3, pr, pr, 0, 0, 7); x.fill();
-  x.fillStyle = "#fff"; x.beginPath(); x.ellipse(cx + (look || 0) + pr * 0.4, cy - pr * 0.3, pr * 0.32, pr * 0.32, 0, 0, 7); x.fill();
-}
-
-// ---- Brand stand-in face (DeepSeek only — its real tile hasn't landed yet) -----
-// Keeps the brand colour + monogram so the seat stays recognisable; it still has a
-// mouth and talks (only Grok is mouthless). Swap for the real tile when it lands.
-function drawBrandFace(color, mark) {
-  return function () {
-    const c = mk(), x = c.getContext("2d");
-    rr(x, 40, 44, 280, 280, 58); x.fillStyle = "#f3efe4"; x.fill(); // plate
-    x.save(); rr(x, 40, 44, 280, 280, 58); x.clip();
-    x.globalAlpha = 0.16; x.fillStyle = color; x.fillRect(40, 44, 280, 280); x.restore();
-    x.strokeStyle = color; x.lineWidth = 5; rr(x, 40, 44, 280, 280, 58); x.stroke();
-    x.fillStyle = color; x.beginPath(); x.ellipse(180, 96, 30, 30, 0, 0, 7); x.fill(); // monogram chip
-    x.fillStyle = "#fff"; x.font = "700 30px -apple-system,Segoe UI,Roboto,sans-serif";
-    x.textAlign = "center"; x.textBaseline = "middle"; x.fillText(mark, 180, 98);
-    eye(x, 142, 198, 22, 24, 12, 1); eye(x, 218, 198, 22, 24, 12, 1);
-    x.globalAlpha = 0.18; x.fillStyle = color; // cheeks
-    for (const chx of [126, 234]) { x.beginPath(); x.ellipse(chx, 226, 16, 11, 0, 0, 7); x.fill(); }
-    x.globalAlpha = 1;
-    x.strokeStyle = color; x.lineWidth = 6; x.lineCap = "round"; // closed mouth (anchor row)
-    x.beginPath(); x.moveTo(154, 250); x.quadraticCurveTo(180, 264, 206, 250); x.stroke();
-    return c;
-  };
-}
-const drawDeepSeek = drawBrandFace("#4D6BFE", "D");
 
 const FACE_COMMON = { kind: "face", maxShift: 0.012 };
 
@@ -116,14 +86,14 @@ export const ROSTER = [
     jawBottom: 0.66, maxOpen: 0.05, maxShift: 0.004, cavityColor: "#2a1a3a", lidColor: "#6a5a88",
     line: "I'll weigh the trade-offs and keep us balanced." },
 
-  // DeepSeek — CONFIRMED PERMANENT seat, but the ONE remaining seat still awaiting
-  // its real art (Amanda will supply a tile). Keeps its branded stand-in face that
-  // still talks (only Grok is mouthless). Swap imageCanvas for the real
-  // image:'avatars/deepseek.<ext>' + tune geometry when the tile lands.
-  { ...FACE_COMMON, id: "deepseek", name: "DeepSeek", role: "seat · brand · awaiting real tile",
-    standin: true, imageCanvas: drawDeepSeek(), voice: "am_eric",
-    eye: { x: 0.36, y: 0.475, w: 0.28, h: 0.15 }, anchor: 0.694, mouthCx: 0.5, mouthW: 0.16,
-    jawBottom: 0.90, maxOpen: 0.075, cavityColor: "#172148", lidColor: "#efe9dd",
+  // DeepSeek — REAL tile (the blue whale in a lab coat, 'Deep-Sea Scholar'). Mouth
+  // box sits on the SMILE LINE where the upper jaw (grey snout) meets the cream
+  // lower jaw; the dark cavity opens MODESTLY downward (whales open downward) so it
+  // reads as talking. Eye box on the one visible eye; lid matches the head's blue.
+  { ...FACE_COMMON, id: "deepseek", name: "DeepSeek", role: "research · whale · Deep-Sea Scholar",
+    image: "avatars/deepseek.jpg", voice: "am_eric",
+    eye: { x: 0.555, y: 0.305, w: 0.115, h: 0.070 }, anchor: 0.455, mouthCx: 0.31, mouthW: 0.26,
+    jawBottom: 0.58, maxOpen: 0.042, maxShift: 0.006, cavityColor: "#16212e", lidColor: "#3d6c9a",
     line: "I'll dig into the technical detail and the edge cases." },
 
   // OpenRouter — REAL tile (paper-bag character; the map look is just print on the
