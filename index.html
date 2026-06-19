@@ -4,6 +4,8 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="theme-color" content="#F4EFE6" />
+<link rel="icon" type="image/png" href="favicon-32.png" />
+<link rel="apple-touch-icon" href="icon-192.png" />
 <title>Plus Bobby — talking face, free voice</title>
 <style>
   :root{ --cream:#F4EFE6; --card:#fff; --ink:#232323; --muted:#7a766d;
@@ -111,8 +113,8 @@ let firstName = "Sage";
 const fullName = () => `${firstName.trim() || "Sage"} Bobby`;
 
 const QUICK = [
-  () => `Hi, I'm ${fullName()} — ${ "your Bobby. I keep an eye on the running of things, so you don't have to hold it all in your head." }`,
-  () => `Want the quick version? Cashflow's steady, two invoices are overdue, and your VAT return is due in nine days. Shall I tackle the invoices first?`,
+  () => `Hi — I'm ${fullName()}, your Bobby. Good to meet you.`,
+  () => `I'm your Bobby — I keep an eye on the running of things, so you don't have to hold it all in your head. Cashflow's steady, two invoices are overdue, and your VAT return is due in nine days. Shall I chase the invoices first?`,
   () => `I only speak from what I can actually see in your systems. If I'm not sure, I won't guess — I'll ask you first.`,
 ];
 const CHIP_LABELS = ["Introduce yourself", "Today's headlines", "How I work"];
@@ -122,12 +124,13 @@ async function say(text) {
   if (!engine.ready || speaking) return;
   speaking = true;
   $("seat").classList.add("speaking");
-  $("status").textContent = "Bobby is talking…";
+  $("status").textContent = "Bobby is finding his voice…";
   try {
     const r = await engine.generate(text, BOBBY.voice);
     $("m-audio").textContent = r.audioSec.toFixed(1) + " s";
     $("m-gen").textContent = (r.genMs / 1000).toFixed(2) + " s";
-    $("m-rtf").textContent = r.rtf.toFixed(2) + "×" + (r.rtf <= 1 ? "  ✓ real-time" : "  (slow on this device)");
+    $("m-rtf").textContent = r.rtf.toFixed(2) + "×" + (r.rtf <= 1 ? "  ✓ real-time" : "  (CPU — see note)");
+    $("status").textContent = "Bobby is talking…";
     face.setLevelFn(() => player.sample());
     await player.play(r.audio, r.sr);
   } catch (e) {
