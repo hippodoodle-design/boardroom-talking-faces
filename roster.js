@@ -97,10 +97,12 @@ export const ROSTER = [
     line: "I'll dig into the technical detail and the edge cases." },
 
   // OpenRouter — REAL tile (paper-bag character; the map look is just print on the
-  // bag). Mouth box on its open smile.
+  // bag). Mouth box on its open smile. The bag has only tiny stylised dot-eyes, so the
+  // blink-lid drew as a stray whiteish band floating high on the bag (nowhere near the
+  // dots) — noBlink turns it off entirely; its mouth still moves. (rev2 fix #1.)
   { ...FACE_COMMON, id: "openrouter", name: "OpenRouter",
     role: "paper-bag seat · one key, many minds",
-    image: "avatars/openrouter.jpg", voice: "bf_alice",
+    image: "avatars/openrouter.jpg", voice: "bf_alice", noBlink: true,
     eye: { x: 0.34, y: 0.36, w: 0.30, h: 0.12 }, anchor: 0.52, mouthCx: 0.47, mouthW: 0.13,
     jawBottom: 0.63, maxOpen: 0.06, maxShift: 0.004, cavityColor: "#5a2a28", lipColor: "#caa67e", lidColor: "#e6dcc6",
     line: "I'm the doorway — one key, many minds at the table." },

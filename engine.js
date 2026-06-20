@@ -346,8 +346,11 @@ export class FaceRenderer {
     // blink — softened translucent eyelid drops from the top of the eye box, with a
     // feathered leading edge so it reads as a lid sweeping, not a paint patch.
     // SKIPPED for glasses-wearers (cfg.glasses) where a lid fights the lens/frame —
-    // their eyes simply stay open and natural (the mouth still moves).
-    if (this.blink > 0.02 && cfg.eye && !cfg.glasses) {
+    // their eyes simply stay open and natural (the mouth still moves). Also SKIPPED
+    // for cfg.noBlink seats (e.g. OpenRouter's paper-bag with tiny stylised dot-eyes,
+    // where any lid reads as a stray whiteish band floating high on the bag — a stray
+    // band is worse than no blink).
+    if (this.blink > 0.02 && cfg.eye && !cfg.glasses && !cfg.noBlink) {
       const ex = cfg.eye.x * W, ey = cfg.eye.y * H, ew = cfg.eye.w * W, eh = cfg.eye.h * H;
       const lidH = this.blink * eh;
       ctx.save();
