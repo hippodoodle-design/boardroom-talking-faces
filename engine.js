@@ -236,16 +236,31 @@ export class FaceRenderer {
     this.off = document.createElement("canvas");   // buffer for the feathered jaw-drop
     this.octx = this.off.getContext("2d");
   }
-  async load() {
-    if (this.cfg.imageCanvas) {
+  // load(shared?) — `shared` is an already-decoded Image (e.g. the boardroom room
+  // render) that several seats crop from. A cfg.crop {x,y,w,h} (fractions of that
+  // image) carves out THIS seat's portrait, so the talking canvas draws the exact
+  // same pixels as the baked room behind it and overlays seamlessly — only the
+  // mouth/eyes move. Without crop the renderer behaves exactly as before.
+  async load(shared) {
+    if (this.cfg.crop) {
+      this.img = shared || await loadImage(this.cfg.image);
+      const iw = this.img.naturalWidth || this.img.width;
+      const ih = this.img.naturalHeight || this.img.height;
+      const cr = this.cfg.crop;
+      this.sx = Math.round(cr.x * iw); this.sy = Math.round(cr.y * ih);
+      this.sw = Math.round(cr.w * iw); this.sh = Math.round(cr.h * ih);
+      this.c.width = this.sw; this.c.height = this.sh;
+    } else if (this.cfg.imageCanvas) {
       // a pre-rendered stand-in face (offscreen canvas) — reuses every effect
       this.img = this.cfg.imageCanvas;
-      this.c.width = this.img.width;
-      this.c.height = this.img.height;
+      this.sx = 0; this.sy = 0;
+      this.c.width = this.sw = this.img.width;
+      this.c.height = this.sh = this.img.height;
     } else {
       this.img = await loadImage(this.cfg.image);
-      this.c.width = this.img.naturalWidth;
-      this.c.height = this.img.naturalHeight;
+      this.sx = 0; this.sy = 0;
+      this.c.width = this.sw = this.img.naturalWidth;
+      this.c.height = this.sh = this.img.naturalHeight;
     }
     this.draw();
   }
@@ -262,8 +277,14 @@ export class FaceRenderer {
       if (this.blinkPhase >= 1) { this.blinkPhase = null; this.blink = 0; this.nextBlink = 2 + Math.random() * 4; }
       else this.blink = Math.sin(this.blinkPhase * Math.PI);
     }
-    this.swayX = Math.sin(this.t * 0.7) * 2;
-    this.swayY = Math.sin(this.t * 0.5 + 1) * 1.4 + this.open * 1.2;
+    // Room-overlay seats are pinned over a baked render, so any whole-canvas sway
+    // would shear the tile against the room behind it — keep them rock-steady and
+    // let only the mouth/eyes move. Free-standing tiles still get the gentle sway.
+    if (this.cfg.noSway) { this.swayX = 0; this.swayY = 0; }
+    else {
+      this.swayX = Math.sin(this.t * 0.7) * 2;
+      this.swayY = Math.sin(this.t * 0.5 + 1) * 1.4 + this.open * 1.2;
+    }
     this.draw();
   }
   draw() {
@@ -273,7 +294,10 @@ export class FaceRenderer {
     ctx.clearRect(0, 0, W, H);
     ctx.save();
     ctx.translate(this.swayX || 0, this.swayY || 0);
-    ctx.drawImage(img, 0, 0, W, H);
+    // draw from this seat's source rect (whole image when sx/sy/sw/sh default to
+    // the full natural size) into the full canvas.
+    const SX = this.sx || 0, SY = this.sy || 0, SW = this.sw || W, SH = this.sh || H;
+    ctx.drawImage(img, SX, SY, SW, SH, 0, 0, W, H);
 
     const anchorY = cfg.anchor * H;
     const jawBottom = (cfg.jawBottom || 0.95) * H;
@@ -288,7 +312,8 @@ export class FaceRenderer {
       const off = this.off, octx = this.octx;
       off.width = bandW; off.height = jawH + shift + 2;
       octx.clearRect(0, 0, off.width, off.height);
-      octx.drawImage(img, bx, anchorY, bandW, jawH, 0, shift, bandW, jawH);
+      // source offset by sx/sy so the band is sampled from this seat's crop region
+      octx.drawImage(img, SX + bx, SY + anchorY, bandW, jawH, 0, shift, bandW, jawH);
       if (cfg.jawW) {
         const fade = Math.min(bandW * 0.24, 46);
         octx.globalCompositeOperation = "destination-in";
@@ -346,11 +371,8 @@ export class FaceRenderer {
     // blink — softened translucent eyelid drops from the top of the eye box, with a
     // feathered leading edge so it reads as a lid sweeping, not a paint patch.
     // SKIPPED for glasses-wearers (cfg.glasses) where a lid fights the lens/frame —
-    // their eyes simply stay open and natural (the mouth still moves). Also SKIPPED
-    // for cfg.noBlink seats (e.g. OpenRouter's paper-bag with tiny stylised dot-eyes,
-    // where any lid reads as a stray whiteish band floating high on the bag — a stray
-    // band is worse than no blink).
-    if (this.blink > 0.02 && cfg.eye && !cfg.glasses && !cfg.noBlink) {
+    // their eyes simply stay open and natural (the mouth still moves).
+    if (this.blink > 0.02 && cfg.eye && !cfg.glasses) {
       const ex = cfg.eye.x * W, ey = cfg.eye.y * H, ew = cfg.eye.w * W, eh = cfg.eye.h * H;
       const lidH = this.blink * eh;
       ctx.save();
